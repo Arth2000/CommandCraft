@@ -5,6 +5,8 @@ from math import pow, floor, cos, sin, ceil, pi
 # Regex format
 sq = re.compile(r'\[\[-?.+?(, ?-?.+?)*\]\]')
 ang = re.compile(r'<<-?\d+(\.\d*)?(:-?\d+(\.\d*)?){0,2}>>')
+par = re.compile(r'\(\(-?\d+(\.\d*)?(:-?\d+(\.\d*)?){0,2}\)\)')
+cur = re.compile(r'\{\{-?\d+(\.\d*)?(:-?\d+(\.\d*)?){0,2}\}\}')
 
 # how to place the commands blocks
 direction = 'x'
@@ -516,7 +518,7 @@ def curly_generator(commands):
 
     try:
         result = []
-        cur = re.compile(r'\{\{-?\d+(\.\d*)?(:-?\d+(\.\d*)?){0,2}\}\}')
+        global cur
         for c in commands:
             if not cur.search(c):
                 result.append(c)
@@ -562,7 +564,7 @@ def parenthesis_generator(commands):
 
     try:
         result = []
-        par = re.compile(r'\(\(-?\d+(\.\d*)?(:-?\d+(\.\d*)?){0,2}\)\)')
+        global par
         for c in commands:
             if not par.search(c):
                 result.append(c)
@@ -617,6 +619,7 @@ def square_generator(commands):
         return commands
 
     result = []
+    global sq
     for c in commands:
         if not sq.search(c):
             result.append(c)
