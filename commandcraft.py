@@ -1,6 +1,8 @@
 import re
-from math import pow, floor, cos, sin, ceil, pi
-# from pymclevel import TAG_Int, TAG_Compound, TAG_String, TAG_Byte, TAG_List
+from math import pow, cos, sin, ceil, pi
+
+from pymclevel import TAG_Int, TAG_Compound, TAG_String
+
 
 # Regex format
 sq = re.compile(r'\[\[-?.+?(, ?-?.+?)*\]\]')
@@ -11,8 +13,11 @@ cur = re.compile(r'\{\{-?\d+(\.\d*)?(:-?\d+(\.\d*)?){0,2}\}\}')
 # how to place the commands blocks
 direction = 'x'
 
-# The sections.  name: Section
+# The sections.
 sections = dict()
+
+# The code parts.
+parts = dict()
 
 PLACEMENT = {  # The placement position
                'x': ({'y': -1, 'z': 0}, {'y': 1, 'z': 0}, {'z': 1, 'y': 0}, {'z': -1, 'y': 0}),
@@ -242,7 +247,6 @@ def command_formatting(command):
         4. Scoreboard: <sel> <operation> <value 1> [value 2] ...
         5. Sin/cos: <sin|cos> <source objective|rotation> <step> <multiplier> [dest objective]
     """
-    # TODO: Square Root pattern
     result = []
     command = command.strip()
     try:
@@ -382,6 +386,8 @@ def command_formatting(command):
 
             raise EndOfAnalyse
 
+        # Square Root pattern:
+        # sqrt <sel> <obj> <min val> <max val> [dest obj]
         r = re.match(r'^sqrt (?P<sel>\S+) (?P<obj>\S+) (?P<min_val>-?\d+) (?P<max_val>-?\d+)( (?P<dest_obj>\S+))?$',
                      command)
         if r:
@@ -389,7 +395,7 @@ def command_formatting(command):
             sel = selector(r.group('sel'), 'score_{}_min'.format(obj), 'score_{}'.format(obj))
             obj = r.group('dest_obj') or obj
             result = ['scoreboard players set {} {} {}'.format(
-                sel.format(int(ceil(pow(value  + 0.5, 2))), int(ceil(pow(value - 0.5, 2)))),
+                sel.format(int(ceil(pow(value + 0.5, 2))), int(ceil(pow(value - 0.5, 2)))),
                 obj, value)
                 for value in xrange(int(r.group('min_val')), int('max_val'))
             ]
@@ -459,7 +465,13 @@ def command_formatting(command):
     except EndOfAnalyse:
         return angle_generator(curly_generator(parenthesis_generator(square_generator(result))))
 
-    # TODO: handle other exceptions
+    except (IndexError, ZeroDivisionError, TypeError, ValueError):
+        print "Invalid command {}. Command ignored.".format(command)
+        return None
+
+    except AnalyseError as e:
+        print "{}. Command ignored.".format(e.message)
+        return None
 
 
 def angle_generator(commands):
@@ -536,12 +548,12 @@ def curly_generator(commands):
                     float(s[2]) if len(s) == 3 else 1
                 )])
 
-            parts = len(rest_command)
+            pps = len(rest_command)
             vals = zip(*values)
             for v in vals:
                 r = ''
-                for i in xrange(parts):
-                    r += str(rest_command[i]) + str(v[i] if i < parts - 1 else '')
+                for i in xrange(pps):
+                    r += str(rest_command[i]) + str(v[i] if i < pps - 1 else '')
 
                 result.append(r)
 
@@ -779,7 +791,92 @@ def frange(mini, maxi=None, step=1):
         yield mini
         mini += step
 
-
-# TODO: parts finder
-# TODO: direction finder
 # TODO: code analyser
+
+
+def parts_finder(text):
+    """
+    Define the dict sections.
+    """
+    global parts
+    p = re.split(r'^#', text)
+    for i in xrange(len(p)):
+        lines = p[i].splitlines()
+        if re.match(r'^code [xz]$', lines[0]):
+            global direction
+            l = lines[0].split(' ')
+            direction = l[1]
+            parts[l[0]] = lines[1:]
+
+        else:
+            parts[lines[0]] = lines[1:]
+            if lines[0] == "code":
+                global direction
+                direction = 'x'
+
+    if "code" not in parts:
+        raise End
+
+
+def add_command_blocks():
+    """
+    Add the command blocks to the level.
+    """
+    global lvl
+    for sec in sections.itervalues():
+        for x, y, z, c in blocks(sec):
+            chunk = lvl.getChunk(x / 16, z / 16)
+            tile = lvl.tileEntityAt(x, y, z)
+            if tile is not None:
+                chunk.TileEntities.remove(tile)
+
+            control = TAG_Compound()
+            control["Command"] = TAG_String(c)
+            control["id"] = TAG_String(u'Control')
+            control["SuccessCount"] = TAG_Int(0)
+            control["x"] = TAG_Int(x)
+            control["y"] = TAG_Int(y)
+            control["z"] = TAG_Int(z)
+            chunk.TileEntities.append(control)
+            chunk.dirty = True
+            lvl.setBlockAt(x, y, z, 137)
+            lvl.setBlockDataAt(x, y, z, 0)
+            chunk.dirty = True
+
+
+def add_objective(name, criteria, display=None):
+    """
+    add_objective(name, criteria[, display])
+    Add the objective with the given properties.
+    """
+    global scoreboard_dat
+    obj = TAG_Compound()
+    obj['CriteriaName'] = TAG_String(criteria)
+    obj['DisplayName'] = TAG_String(display or name)
+    obj['Name'] = TAG_String(name)
+    obj['RenderType'] = TAG_String("integer")
+    scoreboard_dat["data"]["Objectives"].append(obj)
+
+
+lvl = None
+max_height = 0
+scoreboard_dat = None
+
+displayName = "CommandCraft V1.8.4 R0.1"
+
+inputs = (
+    ("Maximum Height", (255, 1, 255)),
+    ('Code Path', ('string', 'value='))
+)
+
+
+def perform(level, box, options):
+    lvl = level
+    max_height = options["Maximum Height"]
+    try:
+        with open(options["Code Path"], "r") as cd:
+            parts_finder(cd.read())
+
+        scoreboard_dat = lvl.init_scoreboard
+    except End:
+        pass
