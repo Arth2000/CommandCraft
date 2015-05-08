@@ -1,6 +1,6 @@
 import pytest
-from commandcraft import Section, Loop, Function, End, blocks, is_number, command_formatting, selector, frange, angle_generator, \
-    curly_generator, parenthesis_generator, square_generator
+from commandcraft import Section, Loop, Function, End, blocks, is_number, selector, frange, angle_generator, \
+    curly_generator, parenthesis_generator, square_generator, parts_finder
 
 
 def section_ft(base_pos=(0, 60, 0), commands=None, name="default name"):
@@ -298,3 +298,21 @@ def test_parenthesis_generator_with_text():
 def test_square_generator():
     assert square_generator('[[Something, 42, 3.141592, <<-3:3:1.5>>, something you may like]]') \
         == ['Something', '42', '3.141592', '<<-3:3:1.5>>', 'something you may like']
+
+
+def test_parts_finder_exists():
+    assert parts_finder is not None
+
+
+def test_parts_finder_raise_end_exception_when_no_code_section():
+    with pytest.raises(End):
+        parts_finder("#")
+
+
+def test_parts_finder_only_code():
+    assert parts_finder("#code\nsay hi") == {"code": ["say hi"]}
+
+
+def test_parts_finder_with_more_sections():
+    assert parts_finder("#code\nsay hi\nsay hia\n#variables\n%a = b") == {"code": ["say hi", "say hia"],
+                                                                          "variables": ["%a = b"]}
