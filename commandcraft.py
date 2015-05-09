@@ -4,6 +4,7 @@ from math import pow, cos, sin, ceil, pi
 from pymclevel import TAG_Int, TAG_Compound, TAG_String
 
 
+
 # Regex format
 sq = re.compile(r'\[\[-?.+?(, ?-?.+?)*\]\]')
 ang = re.compile(r'<<-?\d+(\.\d*)?(:-?\d+(\.\d*)?){0,2}>>')
@@ -197,46 +198,6 @@ class Loop(object, Section):
         return self._start
 
 
-if direction == 'x':
-    def blocks(obj):
-        """
-        blocks(Section) -> yield x, y, z, command
-        Yield a command with the position of the command block
-        """
-        if obj.width == 1:
-            for i in range(obj.length):
-                for k, p in ((j, PLACEMENT['x'][j]) for j in xrange(4)):
-                    yield (obj.base_pos[0] + i, obj.base_pos[1] + p['y'], obj.base_pos[2] + p['z'],
-                           obj.commands[i * 4 + k])
-
-        else:
-            for j in xrange(obj.width):
-                for i in xrange(obj.length):
-                    yield (obj.base_pos[0] + i, obj.base_pos[1], obj.base_pos[2] + j,
-                           obj.commands[j * obj.d * 2 + i * 2])
-                    yield (obj.base_pos[0] + i, obj.base_pos[1] + 2, obj.base_pos[2] + j,
-                           obj.commands[j * obj.d * 2 + i * 2 + 1])
-
-else:
-    def blocks(obj):
-        """
-        blocks(Section) -> yield x, y, z, command
-        Yield a command with the position of the command block
-        """
-        if obj.width == 1:
-            for i in range(obj.length):
-                for k, p in ((j, PLACEMENT['z'][j]) for j in xrange(4)):
-                    yield (obj.base_pos[0] + p['x'], obj.base_pos[1] + p['y'], obj.base_pos[2] + i,
-                           obj.commands[i * 4 + k])
-        else:
-            for i in xrange(obj.length):
-                for j in xrange(obj.width):
-                    yield (obj.base_pos[0] + i, obj.base_pos[1], obj.base_pos[2] + j,
-                           obj.commands[i * obj.width * 2 + j * 2])
-                    yield (obj.base_pos[0] + i, obj.base_pos[1] + 1, obj.base_pos[2] + j,
-                           obj.commands[i * obj.width * 2 + j * 2 + 1])
-
-
 def command_formatting(command):
     """
     command_formatting(command) -> list of formatted commands
@@ -411,6 +372,7 @@ def command_formatting(command):
             start = 0
             stop = 361
             fix = 0
+            sel = None
             if obj in ('rx', 'ry'):
                 sel = selector(r.group('sel'), obj + 'm', obj)
                 if obj == 'rx':
@@ -466,12 +428,12 @@ def command_formatting(command):
         return angle_generator(curly_generator(parenthesis_generator(square_generator(result))))
 
     except (IndexError, ZeroDivisionError, TypeError, ValueError):
-        print "Invalid command {}. Command ignored.".format(command)
-        return None
+        print "Invalid command {}. Command not analysed.".format(command)
+        return [command]
 
     except AnalyseError as e:
-        print "{}. Command ignored.".format(e.message)
-        return None
+        print "{}. Command not analysed.".format(e.message)
+        return [command]
 
 
 def angle_generator(commands):
@@ -484,38 +446,41 @@ def angle_generator(commands):
     if not commands or type(commands) != 'list':
         return commands
 
-    try:
-        global ang
-        result = []
-        for c in commands:
-            if not ang.search(c):
+    global ang  # The regex pattern
+    result = []
+    for c in commands:
+
+        try:
+            if not ang.search(c):  # If no generators
                 result.append(c)
                 continue
 
-            split = ang.split(c)
+            split = ang.split(c)  # Split the generators
             rest_command = [split[i] for i in xrange(0, len(split), 4)]
-            rest_command[0] = [rest_command[0]]
-            for gen in ang.finditer(c):
+            rest_command[0] = [rest_command[0]]  # This is the result (list of modified commands)
+
+            for gen in ang.finditer(c):  # Go through each generator and generate the correct values
                 s = gen.group(0)[2:-2].split(':')
-                t = []
+                t = []  # Temp modified commands
                 for v in (int(v) if re.match(r'^(-?\d+\.0?|-?\d+)$', str(v)) else v for v in frange(
                         float(s[0]),
                         float(s[1]) if len(s) >= 2 else None,
                         float(s[2]) if len(s) == 3 else 1)):
 
                     for c_p in rest_command[0]:
+                        # Add the current modified command, the value and the next part of the command to t.
                         t.append(c_p + str(v) + rest_command[1])
 
                 rest_command[0] = t
-                rest_command.pop(1)
+                del rest_command[1]  # Remove the part.
 
             result.extend(rest_command[0])
 
-        return result
+        except (TypeError, ValueError, ZeroDivisionError):
+            print 'Error into an angle generator in command {}. Generators ignored.'.format(c)
+            result.append(c)
 
-    except (TypeError, ValueError, ZeroDivisionError):
-        print 'Error into an angle generator.'
-        return commands
+    return result
 
 
 def curly_generator(commands):
@@ -528,10 +493,10 @@ def curly_generator(commands):
     if not commands or type(commands) != 'list':
         return commands
 
-    try:
-        result = []
-        global cur
-        for c in commands:
+    result = []
+    global cur
+    for c in commands:
+        try:
             if not cur.search(c):
                 result.append(c)
                 continue
@@ -557,68 +522,62 @@ def curly_generator(commands):
 
                 result.append(r)
 
-        return result
+        except (TypeError, ValueError, ZeroDivisionError):
+            print 'Error into a curly generator in command {}. Generators ignored.'.format(c)
+            result.append(c)
 
-    except (TypeError, ValueError, ZeroDivisionError):
-        print 'Error into a curly generator.'
-        return commands
+    return result
+
 
 
 def parenthesis_generator(commands):
     """
-    parenthesis_generator(commands) -> list of formated commands
+    parenthesis_generator(commands) -> list of formatted commands
     Generate every parenthesis generators in commands
     """
-    # TODO: Finish it.
 
     if not commands or type(commands) != 'list':
         return commands
 
-    try:
-        result = []
-        global par
-        for c in commands:
-            if not par.search(c):
+    result = []
+    global par  # The regex format
+    for c in commands:
+        try:
+            if not par.search(c):  # If no parenthesis generator in the command
                 result.append(c)
                 continue
 
-            split = par.split(c)
-            rest_command = [split[i] for i in xrange(0, len(split), 4)]
-            rest_command[0] = [rest_command[0]]
-            values = []
-            ind = 0
-            for gen in par.finditer(c):
-                s = gen.group(0)[2:-2].split(':')
-                t = []
-                if len(s) >= 2:
-                    ind += 1
-                    values.append([int(v) if re.match(r'^(-?\d+\.0?|-?\d+)$', str(v)) else v for v in frange(
+            split = par.split(c)  # Remove the generators
+            rest_command = [split[i] for i in xrange(0, len(split), 4)]  # Remove the group
+            generators = []  # The generators of each generator: [[[indexes], [values]], ...]
+            gens = par.findall(c)
+            for i in xrange(len(gens)):
+                s = gens[i].group(0)[2:-2].split(':')  # Make an usable generator: s = [min, max, step]
+                t = []  # result
+                if len(s) >= 2:  # If generator
+
+                    # Add a new generator in generators
+                    generators.append([[i], [int(v) if re.match(r'^(-?\d+\.0?|-?\d+)$', str(v)) else v for v in frange(
                         float(s[0]),
                         float(s[1]),
                         float(s[2]) if len(s) == 3 else 1
-                    )])
-                    for c_p in rest_command[0]:
-                        t.append(c_p + '{' + str(ind) + '}' + rest_command[1])
+                    )]])
 
-                else:
-                    for c_p in rest_command[0]:
-                        t.append(c_p + s[0] + rest_command[1])
+                else:  # If index
+                    generators[int(s[0])][0].append(i)  # Add the index in the generator
 
-                rest_command[0] = t
-                rest_command.pop(1)
+            for gen in xrange(len(generators)):  # Go through each values of each generator and set it.
+                for val in generators[gen][1]:
+                    for i in generators[gen][0]:
+                        rest_command.insert(i, str(val))
 
-            for vs in values:
-                for val in vs:
-                    for i in xrange(len(rest_command[0])):
-                        rest_command[0][i] = rest_command[0][i].format(val)
+            result.extend(''.join(rest_command))
 
-            result.extend(rest_command[0])
+        except (TypeError, ValueError, ZeroDivisionError, IndexError):
+            print 'Error into a parenthesis generator in command {}. Generators ignored.'.format(c)
+            result.append(c)
 
-        return result
-
-    except (TypeError, ValueError, ZeroDivisionError):
-        print 'Error into a parenthesis generator.'
-        return commands
+    return result
 
 
 def square_generator(commands):
@@ -861,6 +820,7 @@ def add_objective(name, criteria, display=None):
 lvl = None
 max_height = 0
 scoreboard_dat = None
+blocks = None
 
 displayName = "CommandCraft V1.8.4 R0.1"
 
@@ -870,13 +830,62 @@ inputs = (
 )
 
 
+def define_blocks(direc):
+    """
+    Define the blocks function and return it
+    """
+    if direc == 'x':
+        def bl(obj):
+            """
+            bl(Section) -> yield x, y, z, command
+            Yield a command with the position of the command block
+            """
+            if obj.width == 1:
+                for i in range(obj.length):
+                    for k, p in ((j, PLACEMENT['x'][j]) for j in xrange(4)):
+                        yield (obj.base_pos[0] + i, obj.base_pos[1] + p['y'], obj.base_pos[2] + p['z'],
+                               obj.commands[i * 4 + k])
+
+            else:
+                for j in xrange(obj.width):
+                    for i in xrange(obj.length):
+                        yield (obj.base_pos[0] + i, obj.base_pos[1], obj.base_pos[2] + j,
+                               obj.commands[j * obj.d * 2 + i * 2])
+                        yield (obj.base_pos[0] + i, obj.base_pos[1] + 2, obj.base_pos[2] + j,
+                               obj.commands[j * obj.d * 2 + i * 2 + 1])
+
+    else:
+        def bl(obj):
+            """
+            bl(Section) -> yield x, y, z, command
+            Yield a command with the position of the command block
+            """
+            if obj.width == 1:
+                for i in range(obj.length):
+                    for k, p in ((j, PLACEMENT['z'][j]) for j in xrange(4)):
+                        yield (obj.base_pos[0] + p['x'], obj.base_pos[1] + p['y'], obj.base_pos[2] + i,
+                               obj.commands[i * 4 + k])
+            else:
+                for i in xrange(obj.length):
+                    for j in xrange(obj.width):
+                        yield (obj.base_pos[0] + i, obj.base_pos[1], obj.base_pos[2] + j,
+                               obj.commands[i * obj.width * 2 + j * 2])
+                        yield (obj.base_pos[0] + i, obj.base_pos[1] + 1, obj.base_pos[2] + j,
+                               obj.commands[i * obj.width * 2 + j * 2 + 1])
+
+    return bl
+
+
 def perform(level, box, options):
+    global lvl, max_height, scoreboard_dat, blocks, direction
+
     lvl = level
     max_height = options["Maximum Height"]
     try:
         with open(options["Code Path"], "r") as cd:
             parts_finder(cd.read())
 
+        blocks = define_blocks(direction)
         scoreboard_dat = lvl.init_scoreboard
     except End:
         pass
