@@ -1,15 +1,16 @@
 import pytest
-from commandcraft import Section, Loop, Function, End, blocks, is_number, selector, frange, angle_generator, \
-    curly_generator, parenthesis_generator, square_generator, parts_finder
+
+from commandcraft import Section, Loop, Function, End, is_number, selector, frange, angle_generator, \
+    curly_generator, parenthesis_generator, square_generator, parts_finder, define_blocks, parts
 
 
-def section_ft(base_pos=(0, 60, 0), commands=None, name="default name"):
+def section_ft(base_pos=(0, 60, 0), commands=None, name="default_name"):
     if not commands:
         commands = ['/tellraw @a {text:"This is a test!"}', '/tellraw @a {text:"This is also a test!"}']
     return Section(base_pos, commands, name)
 
 
-def function_ft(base_pos=(0, 60, 0), commands=None, name="default name"):
+def function_ft(base_pos=(0, 60, 0), commands=None, name="default_name"):
     if not commands:
         commands = ['/tellraw @a {text:"This is a test!"}', '/tellraw @a {text:"This is also a test!"}']
     return Function(base_pos, commands, name)
@@ -34,6 +35,11 @@ def curly_commands():
             '/tellraw @a {text:"This is test number #{{10}}!"}',
             '/say gen n1: #{{-3.14:3.15:3.14}}. gen n2: #{{0:43:21}}',
             '/say t n1: #{{0:3}}. n2: #{{1:3}}']
+
+
+@pytest.fixture
+def blocks_f():
+    return define_blocks('x')
 
 
 def test_section_creation():
@@ -69,30 +75,30 @@ def test_length_with_a_big_value():
     assert section_ft(commands=range(19000)).length == 99
 
 
-def test_function_blocks():
+def test_function_blocks(blocks_f):
     f = function_ft()
     result = ''
-    for px, py, pz, co in blocks(f):
+    for px, py, pz, co in blocks_f(f):
         result += '{}{}{}{}'.format(px, py, pz, co)
 
-    assert result == '0590/fill 0 61 1 1 61 0 minecraft:redstone_block0610/fill 0 61 1 1 61 0 minecraft:stone0601/tellraw @a {text:"This is a test!"}060-1/tellraw @a {text:"This is also a test!"}'
+    assert result == '0590/fill 0 61 1 1 61 1 minecraft:redstone_block0610/fill 0 61 1 1 61 1 minecraft:stone0601/tellraw @a {text:"This is a test!"}060-1/tellraw @a {text:"This is also a test!"}'
 
 
 def test_function_act():
-    assert function_ft().act == ['/fill 0 61 1 1 61 0 minecraft:redstone_block']
+    assert function_ft().act == ['/fill 0 61 1 1 61 1 minecraft:redstone_block']
 
 
-def test_loop_blocks():
+def test_loop_blocks(blocks_f):
     result = ""
     l = loop_ft()
-    for px, py, pz, co in blocks(l):
+    for px, py, pz, co in blocks_f(l):
         result += '{}{}{}{}'.format(px, py, pz, co)
 
-    assert result == '0590/fill 0 61 1 1 61 0 minecraft:stone0610/fill 0 61 1 1 61 0 minecraft:redstone_block0601/tellraw @a {text:"This is a test!"}060-1/tellraw @a {text:"This is also a test!"}'
+    assert result == '0590/fill 0 61 1 1 61 1 minecraft:stone0610/fill 0 61 1 1 61 1 minecraft:redstone_block0601/tellraw @a {text:"This is a test!"}060-1/tellraw @a {text:"This is also a test!"}'
 
 
 def test_loop_start():
-    assert loop_ft().start == ['/setblock -1 60 0 minecraft:stone', '/fill 0 61 1 1 61 0 minecraft:redstone_block']
+    assert loop_ft().start == ['/setblock -1 60 0 minecraft:stone', '/fill 0 61 1 1 61 1 minecraft:redstone_block']
 
 
 def test_loop_stop():
@@ -231,73 +237,75 @@ def test_selector_with_everything():
 
 
 def test_angle_generator(angle_commands):
-    assert angle_generator(*angle_commands) == ['0', '1', '2', '40', '41', '40.1', '41.1', '-3.1415', '0', '3.1415',
-                                                '6.283', '/tellraw @a {text:"This is test number #0!"}',
-                                                '/tellraw @a {text:"This is test number #1!"}',
-                                                '/tellraw @a {text:"This is test number #2!"}',
-                                                '/tellraw @a {text:"This is test number #3!"}',
-                                                '/tellraw @a {text:"This is test number #4!"}',
-                                                '/tellraw @a {text:"This is test number #5!"}',
-                                                '/tellraw @a {text:"This is test number #6!"}',
-                                                '/tellraw @a {text:"This is test number #7!"}',
-                                                '/tellraw @a {text:"This is test number #8!"}',
-                                                '/tellraw @a {text:"This is test number #9!"}',
-                                                '/say gen n1: #-3.14. gen n2: #0',
-                                                '/say gen n1: #0. gen n2: #0',
-                                                '/say gen n1: #3.14. gen n2: #0',
-                                                '/say gen n1: #-3.14. gen n2: #21',
-                                                '/say gen n1: #0. gen n2: #21',
-                                                '/say gen n1: #3.14. gen n2: #21',
-                                                '/say gen n1: #-3.14. gen n2: #42',
-                                                '/say gen n1: #0. gen n2: #42',
-                                                '/say gen n1: #3.14. gen n2: #42']
+    assert angle_generator(angle_commands) == ['0', '1', '2', '40', '41', '40.1', '41.1', '-3.1415', '0', '3.1415',
+                                               '6.283', '/tellraw @a {text:"This is test number #0!"}',
+                                               '/tellraw @a {text:"This is test number #1!"}',
+                                               '/tellraw @a {text:"This is test number #2!"}',
+                                               '/tellraw @a {text:"This is test number #3!"}',
+                                               '/tellraw @a {text:"This is test number #4!"}',
+                                               '/tellraw @a {text:"This is test number #5!"}',
+                                               '/tellraw @a {text:"This is test number #6!"}',
+                                               '/tellraw @a {text:"This is test number #7!"}',
+                                               '/tellraw @a {text:"This is test number #8!"}',
+                                               '/tellraw @a {text:"This is test number #9!"}',
+                                               '/say gen n1: #-3.14. gen n2: #0',
+                                               '/say gen n1: #0. gen n2: #0',
+                                               '/say gen n1: #3.14. gen n2: #0',
+                                               '/say gen n1: #-3.14. gen n2: #21',
+                                               '/say gen n1: #0. gen n2: #21',
+                                               '/say gen n1: #3.14. gen n2: #21',
+                                               '/say gen n1: #-3.14. gen n2: #42',
+                                               '/say gen n1: #0. gen n2: #42',
+                                               '/say gen n1: #3.14. gen n2: #42']
 
 
 def test_curly_generator(curly_commands):
-    assert curly_generator(*curly_commands) == ['0', '1', '2', '40', '41', '40.1', '41.1', '-3.1415', '0', '3.1415',
-                                                '6.283', '/tellraw @a {text:"This is test number #0!"}',
-                                                '/tellraw @a {text:"This is test number #1!"}',
-                                                '/tellraw @a {text:"This is test number #2!"}',
-                                                '/tellraw @a {text:"This is test number #3!"}',
-                                                '/tellraw @a {text:"This is test number #4!"}',
-                                                '/tellraw @a {text:"This is test number #5!"}',
-                                                '/tellraw @a {text:"This is test number #6!"}',
-                                                '/tellraw @a {text:"This is test number #7!"}',
-                                                '/tellraw @a {text:"This is test number #8!"}',
-                                                '/tellraw @a {text:"This is test number #9!"}',
-                                                '/say gen n1: #-3.14. gen n2: #0', '/say gen n1: #0. gen n2: #21',
-                                                '/say gen n1: #3.14. gen n2: #42', '/say t n1: #0. n2: #1',
-                                                '/say t n1: #1. n2: #2']
+    assert curly_generator(curly_commands) == ['0', '1', '2', '40', '41', '40.1', '41.1', '-3.1415', '0', '3.1415',
+                                               '6.283', '/tellraw @a {text:"This is test number #0!"}',
+                                               '/tellraw @a {text:"This is test number #1!"}',
+                                               '/tellraw @a {text:"This is test number #2!"}',
+                                               '/tellraw @a {text:"This is test number #3!"}',
+                                               '/tellraw @a {text:"This is test number #4!"}',
+                                               '/tellraw @a {text:"This is test number #5!"}',
+                                               '/tellraw @a {text:"This is test number #6!"}',
+                                               '/tellraw @a {text:"This is test number #7!"}',
+                                               '/tellraw @a {text:"This is test number #8!"}',
+                                               '/tellraw @a {text:"This is test number #9!"}',
+                                               '/say gen n1: #-3.14. gen n2: #0', '/say gen n1: #0. gen n2: #21',
+                                               '/say gen n1: #3.14. gen n2: #42', '/say t n1: #0. n2: #1',
+                                               '/say t n1: #1. n2: #2']
 
 
 def test_parenthesis_generator_with_maxi():
-    assert parenthesis_generator('((-3:3))') == ['-3', '-2', '-1', '0', '1', '2']
+    assert parenthesis_generator(['((-3:3))']) == ['-3', '-2', '-1', '0', '1', '2']
 
 
 def test_parenthesis_generator_with_step():
-    assert parenthesis_generator('((-3:3:1.5))') == ['-3', '-1.5', '0', '1.5']
+    assert parenthesis_generator(['((-3:3:1.5))']) == ['-3', '-1.5', '0', '1.5']
 
 
 def test_parenthesis_generator_with_index():
-    assert parenthesis_generator('((-3:3:1.5)) ((0))') == ['-3 -3', '-1.5 -1.5', '0 0', '1.5 1.5']
+    assert parenthesis_generator(['((-3:3:1.5)) ((0))']) == ['-3 -3', '-1.5 -1.5', '0 0', '1.5 1.5']
 
 
 def test_parenthesis_generator_with_multiple_indices():
-    assert parenthesis_generator('((-3:3:1.5)) ((6:8)) ((0)) ((1))') == ['-3 6 -3 6', '-1.5 6 -1.5 6', '0 6 0 6',
-                                                                         '1.5 6 1.5 6', '-3 7 -3 7', '-1.5 7 -1.5 7',
-                                                                         '0 7 0 7', '1.5 7 1.5 7']
+    assert parenthesis_generator(['((-3:3:1.5)) ((6:8)) ((0)) ((1))']) == ['-3 6 -3 6', '-3 7 -3 7', '-1.5 6 -1.5 6',
+                                                                           '-1.5 7 -1.5 7', '0 6 0 6',
+                                                                           '0 7 0 7', '1.5 6 1.5 6',
+                                                                           '1.5 7 1.5 7']
 
 
 def test_parenthesis_generator_with_text():
-    assert parenthesis_generator('/say Test number ((-3:3:1.5)). value: ((0))') == ['/say Test number -3. value: -3',
-                                                                                    '/say Test number -1.5. value: -1.5',
-                                                                                    '/say Test number 0. value: 0',
-                                                                                    '/say Test number 1.5. value: 1.5']
+    assert parenthesis_generator(['/say Test number ((-3:3:1.5)). value: ((0))!']) == [
+        '/say Test number -3. value: -3!',
+        '/say Test number -1.5. value: -1.5!',
+        '/say Test number 0. value: 0!',
+        '/say Test number 1.5. value: 1.5!']
 
 
 def test_square_generator():
-    assert square_generator('[[Something, 42, 3.141592, <<-3:3:1.5>>, something you may like]]') \
-        == ['Something', '42', '3.141592', '<<-3:3:1.5>>', 'something you may like']
+    assert square_generator(['[[Something, 42, 3.141592, <<-3:3:1.5>>, something you may like]]']) \
+           == ['Something', '42', '3.141592', '<<-3:3:1.5>>', 'something you may like']
 
 
 def test_parts_finder_exists():
@@ -310,9 +318,11 @@ def test_parts_finder_raise_end_exception_when_no_code_section():
 
 
 def test_parts_finder_only_code():
-    assert parts_finder("#code\nsay hi") == {"code": ["say hi"]}
+    parts_finder("#code\nsay hi")
+    assert parts == {"code": ["say hi"]}
 
 
 def test_parts_finder_with_more_sections():
-    assert parts_finder("#code\nsay hi\nsay hia\n#variables\n%a = b") == {"code": ["say hi", "say hia"],
-                                                                          "variables": ["%a = b"]}
+    parts_finder("#code\nsay hi\nsay hia\n#variables\n%a = b")
+    assert parts == {"code": ["say hi", "say hia"],
+                     "variables": ["%a = b"]}

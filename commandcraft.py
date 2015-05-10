@@ -4,12 +4,11 @@ from math import pow, cos, sin, ceil, pi
 from pymclevel import TAG_Int, TAG_Compound, TAG_String
 
 
-
-# Regex format
-sq = re.compile(r'\[\[-?.+?(, ?-?.+?)*\]\]')
-ang = re.compile(r'<<-?\d+(\.\d*)?(:-?\d+(\.\d*)?){0,2}>>')
-par = re.compile(r'\(\(-?\d+(\.\d*)?(:-?\d+(\.\d*)?){0,2}\)\)')
-cur = re.compile(r'\{\{-?\d+(\.\d*)?(:-?\d+(\.\d*)?){0,2}\}\}')
+# Regex format - generators
+sq = re.compile(r'\[\[-?.+?(?:, ?-?.+?)*\]\]')
+ang = re.compile(r'<<-?\d+(?:\.\d*)?(?::-?\d+(?:\.\d*)?){0,2}>>')
+par = re.compile(r'(\(\(-?\d+(?:\.\d*)?(?::-?\d+(?:\.\d*)?){0,2}\)\))')
+cur = re.compile(r'\{\{-?\d+(?:\.\d*)?(?::-?\d+(?:\.\d*)?){0,2}\}\}')
 
 # how to place the commands blocks
 direction = 'x'
@@ -132,13 +131,13 @@ class Section:
             self.trigger = '/fill {0} {1} {2} {3} {1} {4}'.format(
                 self.base_pos[0], self.base_pos[1] + 1,
                 self.base_pos[2] + 1, self.base_pos[0] + self.length,
-                self.base_pos[2] + self.width - 1
+                self.base_pos[2] + ((self.width - 1) if self.width > 1 else 1)
             ) + ' minecraft:{}'
 
         else:
             self.trigger = '/fill {0} {1} {2} {3} {1} {4}'.format(
                 self.base_pos[0] + 1, self.base_pos[1] + 1,
-                self.base_pos[2], self.base_pos[0] + self.width - 1,
+                self.base_pos[2], self.base_pos[0] + ((self.width - 1) if self.width > 1 else 1),
                 self.base_pos[2] + self.length
             ) + ' minecraft:{}'
 
@@ -443,20 +442,18 @@ def angle_generator(commands):
         Angle generators (pattern: <<min[:max[:step]]>>) where every generator generate his value independently of the
          other.
     """
-    if not commands or type(commands) != 'list':
+    if not commands:
         return commands
 
     global ang  # The regex pattern
     result = []
     for c in commands:
-
         try:
             if not ang.search(c):  # If no generators
                 result.append(c)
                 continue
 
-            split = ang.split(c)  # Split the generators
-            rest_command = [split[i] for i in xrange(0, len(split), 4)]
+            rest_command = ang.split(c)  # Split the generators
             rest_command[0] = [rest_command[0]]  # This is the result (list of modified commands)
 
             for gen in ang.finditer(c):  # Go through each generator and generate the correct values
@@ -490,7 +487,7 @@ def curly_generator(commands):
         Curly generators (pattern: {{min[:max[:step]]}}) generate all values at the same time for every generators.
     """
 
-    if not commands or type(commands) != 'list':
+    if not commands:
         return commands
 
     result = []
@@ -501,8 +498,7 @@ def curly_generator(commands):
                 result.append(c)
                 continue
 
-            split = cur.split(c)
-            rest_command = [split[i] for i in xrange(0, len(split), 4)]
+            rest_command = cur.split(c)
             values = []
             for gen in cur.finditer(c):
                 s = gen.group(0)[2:-2].split(':')
@@ -529,14 +525,13 @@ def curly_generator(commands):
     return result
 
 
-
 def parenthesis_generator(commands):
     """
     parenthesis_generator(commands) -> list of formatted commands
     Generate every parenthesis generators in commands
     """
 
-    if not commands or type(commands) != 'list':
+    if not commands:
         return commands
 
     result = []
@@ -548,12 +543,11 @@ def parenthesis_generator(commands):
                 continue
 
             split = par.split(c)  # Remove the generators
-            rest_command = [split[i] for i in xrange(0, len(split), 4)]  # Remove the group
+            rest_command = [[split[i] for i in xrange(0, len(split), 2)]]  # Remove the group
             generators = []  # The generators of each generator: [[[indexes], [values]], ...]
-            gens = par.findall(c)
+            gens = [split[i] for i in xrange(1, len(split), 2)]
             for i in xrange(len(gens)):
-                s = gens[i].group(0)[2:-2].split(':')  # Make an usable generator: s = [min, max, step]
-                t = []  # result
+                s = gens[i][2:-2].split(':')  # Make an usable generator: s = [min, max, step]
                 if len(s) >= 2:  # If generator
 
                     # Add a new generator in generators
@@ -567,11 +561,20 @@ def parenthesis_generator(commands):
                     generators[int(s[0])][0].append(i)  # Add the index in the generator
 
             for gen in xrange(len(generators)):  # Go through each values of each generator and set it.
-                for val in generators[gen][1]:
-                    for i in generators[gen][0]:
-                        rest_command.insert(i, str(val))
+                temp = list()
+                for i in xrange(len(rest_command)):
+                    t = rest_command[i]
+                    for val in generators[gen][1]:
+                        a = list(t)
+                        for j in generators[gen][0]:
+                            a[j] += str(val)
 
-            result.extend(''.join(rest_command))
+                        temp.append(a)
+
+                rest_command = list(temp)
+
+            for com in rest_command:
+                result.append(''.join(com))
 
         except (TypeError, ValueError, ZeroDivisionError, IndexError):
             print 'Error into a parenthesis generator in command {}. Generators ignored.'.format(c)
@@ -586,7 +589,7 @@ def square_generator(commands):
     Generate the square generators.
         [[<value 1>[, value 2[, ...]]]]
     """
-    if not commands or type(commands) != 'list':
+    if not commands:
         return commands
 
     result = []
@@ -596,8 +599,7 @@ def square_generator(commands):
             result.append(c)
             continue
 
-        split = sq.split(c)
-        rest_command = [split[i] for i in xrange(0, len(split), 2)]
+        rest_command = sq.split(c)
         rest_command[0] = [rest_command[0]]
         for gen in sq.finditer(c):
             t = []
@@ -758,9 +760,9 @@ def parts_finder(text):
     Define the dict sections.
     """
     global parts
-    p = re.split(r'^#', text)
+    p = re.split(r'(?m)^#', text)[1:]
     for i in xrange(len(p)):
-        lines = p[i].splitlines()
+        lines = p[i].splitlines() or ['']
         if re.match(r'^code [xz]$', lines[0]):
             global direction
             l = lines[0].split(' ')
@@ -768,10 +770,11 @@ def parts_finder(text):
             parts[l[0]] = lines[1:]
 
         else:
-            parts[lines[0]] = lines[1:]
-            if lines[0] == "code":
-                global direction
-                direction = 'x'
+            if lines[0]:
+                parts[lines[0]] = lines[1:]
+                if lines[0] == "code":
+                    global direction
+                    direction = 'x'
 
     if "code" not in parts:
         raise End
